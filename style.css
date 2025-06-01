@@ -1,8 +1,9 @@
 QWidget {
     background-color: #1f1f1e;
+    margin: 10px;
 }
 
-QLabel {
+QLabel, QPushButton {
     color: whitesmoke;
     font-size: 50px;
 }
