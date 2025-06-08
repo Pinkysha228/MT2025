@@ -1,9 +1,25 @@
-QWidget {
+QWidget, QMessageBox {
     background-color: #1f1f1e;
     margin: 10px;
+    font-family: "Calibri";
 }
 
 QLabel, QPushButton {
     color: whitesmoke;
+    font-size: 50px;
+    border-radius: 15%;
+    padding: 15px;
+
+}
+
+QPushButton {
+    background: #52eb44;
+}
+
+QLineEdit {
+    color: whitesmoke;
+    background: #f7931a;
+    padding: 50px;
+    border-radius: 15%;
     font-size: 50px;
 }
