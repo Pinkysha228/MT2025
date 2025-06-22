@@ -2,26 +2,27 @@ from PyQt5.QtCore import QSize, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication, QVBoxLayout, QMessageBox, QLineEdit
 from PyQt5.QtCore import QTimer, QPoint
-import sys
+import sys, os
 from basewindow import BaseWindow
 import random
 import json
+import requests
 
 money = 0
 click = 0
-click_cost = 1
-cost_upgrade = 50
+click_cost = float(0.01)
+cost_upgrade = float(0.5)
 
 passive_income = 0
-cost_passive_upgrade = 100
+cost_passive_upgrade = float(0.0001)
 
 username = None
-password = None
 
 
 class Clicker(BaseWindow):
     def __init__(self) -> None:
-        super().__init__("Expense Tracker")
+        super().__init__("Clicker")
+        self.load_savefile()
         layout = QVBoxLayout()
         layout.addLayout(self.init_header_layout())
         layout.addLayout(self.init_button())
@@ -35,7 +36,23 @@ class Clicker(BaseWindow):
 
         self.random_boost = QTimer()
         self.random_boost.timeout.connect(self.boost_money)
-        self.random_boost.start(random.randint(10000, 60000))
+        self.random_boost.start(random.randint(10000, 10000))
+
+
+    def load_savefile(self):
+        global money, click, click_cost, cost_upgrade, passive_income, cost_passive_upgrade, username
+
+        with open(f'users/{username}.json', 'r') as f:
+            data = json.load(f)
+        print(data)
+        money = round(data['money'], 4)
+        click = data['click']
+        click_cost = round(data['click_cost'], 4)
+        cost_upgrade = data['cost_upgrade']
+        passive_income = data['passive_income']
+        cost_passive_upgrade = data['cost_passive_upgrade']
+
+
 
     def init_header_layout(self) -> QBoxLayout:
         global click_cost
@@ -49,13 +66,14 @@ class Clicker(BaseWindow):
         self.boost.clicked.connect(self.upgrade_menu)
 
         layout.addWidget(self.money_label)
-        layout.addWidget(self.boost)
         layout.addWidget(self.cost_click)
+        layout.addWidget(self.boost)
         return layout
 
     def init_button(self) -> QBoxLayout:
         layout = QVBoxLayout()
         self.add_money = QPushButton(self)
+        self.add_money.setObjectName("main_button")
         self.add_money.setIcon(QIcon('bitcoin.png'))
         self.add_money.setIconSize(QSize(200, 200))
         self.add_money.clicked.connect(self.add_money_def)
@@ -78,7 +96,7 @@ class Clicker(BaseWindow):
         global money, click
         money = click_cost * 1 + money
         click += 1
-        self.money_label.setText(f'Баланс: {str(money)}')
+        self.money_label.setText(f'Баланс: {round(money, 4)}')
 
         def animate_click(btn):
             orig_size = btn.size()
@@ -115,43 +133,45 @@ class Clicker(BaseWindow):
 
     def upgrade_menu(self):
         global click_cost, cost_upgrade, money
-        clicked = BaseWindow.window('Апгрейд', f'Ціна апгрейду: {cost_upgrade}')
+        clicked = BaseWindow.window('Апгрейд', f'Ціна апгрейду: {cost_upgrade}') # <- почему то не синхронно с файлом сохранения
         if clicked == QMessageBox.Yes:
             if money >= cost_upgrade:
-                click_cost += 0.5
+                click_cost += 0.05
                 money -= cost_upgrade
                 cost_upgrade *= 2
-                self.money_label.setText(f'Баланс: {str(money)}')
+                self.money_label.setText(f'Баланс: {round(money, 4)}')
+                self.cost_click.setText(f'Ціна кліку: {round(click_cost, 4)}')
+                self.boost.setText('Апгрейд')
 
     def upgrade_passive_income(self):
         global money, passive_income, cost_passive_upgrade
         clicked = BaseWindow.window('Пасивний апгрейд', f'Ціна пасивного апгрейду: {cost_passive_upgrade}')
         if clicked == QMessageBox.Yes:
             if money >= cost_passive_upgrade:
-                money -= cost_passive_upgrade
-                passive_income += 1
+                money = round(money - cost_passive_upgrade, 4)
+                passive_income += 0.01
                 cost_passive_upgrade *= 2
-                self.money_label.setText(f'Баланс: {money}')
-                self.passive_label.setText(f'Пасивний дохід: {passive_income}')
+                self.money_label.setText(f'Баланс: {round(money, 4)}')
+                self.passive_label.setText(f'Пасивний дохід: {round(passive_income, 4)}')
                 self.passive_upgrade.setText(f'Пасивний дохід')
 
     def add_passive_income(self):
         global money, passive_income
         if passive_income > 0:
             money += passive_income
-            self.money_label.setText(f'Баланс: {money}')
+            self.money_label.setText(f'Баланс: {round(money, 4)}')
 
     def boost_money(self):
         global money
-        add_money = random.randint(1, 30)
+        coef = round(click_cost * 0.05 + 0.005, 4)
+        print(coef)
+        add_money = random.uniform(coef*0.1, coef*0.5)
         money += add_money
-        self.money_label.setText(f'Бонус! Зараховано: {add_money}')
+        self.money_label.setText(f'Бонус! Зараховано: {round(add_money, 4)}')
 
     def closeEvent(self, event):
         global money, click, click_cost, cost_upgrade, passive_income, cost_passive_upgrade, username, password
         info = {
-            'login': username,
-            'password': password,
             'money': money,
             'click': click,
             'click_cost': click_cost,
@@ -163,84 +183,82 @@ class Clicker(BaseWindow):
         with open(f'users/{username}.json', 'w', encoding='utf-8') as file:
             json.dump(info, file, ensure_ascii=False, indent=4)
 
-        event.accept() # доробити
+        event.accept()
 
 
+API_URL = "http://127.0.0.1:8000"
 
-class RegisterWindow(BaseWindow):
-    def __init__(self) -> None:
-        super().__init__('Login')
-
-        self.window = None
-
+class LoginWindow(BaseWindow):
+    def __init__(self):
+        super().__init__("Clicker")
         layout = QVBoxLayout()
-        layout.addLayout(self.header_layout())
-        layout.addLayout(self.footer_layout())
+        # login
+        self.login_input = QLineEdit()
+        self.login_input.setPlaceholderText("Login")
+        # password
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        # buttons
+        self.login_button = QPushButton("Увійти")
+        self.register_button = QPushButton("Реєстрація")
+        layout.addWidget(QLabel("Логін: "))
+        layout.addWidget(self.login_input)
+        layout.addWidget(QLabel("Пароль: "))
+        layout.addWidget(self.password_input)
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.login_button)
+        buttons_layout.addWidget(self.register_button)
+        layout.addLayout(buttons_layout)
         self.setLayout(layout)
         self.show()
+        self.login_button.clicked.connect(self.login)
+        self.register_button.clicked.connect(self.register)
 
-    def header_layout(self) -> QBoxLayout:
-        layout = QVBoxLayout()
-        self.login = QLineEdit()
-        self.login.setPlaceholderText("Ім'я користувача")
-
-        self.password = QLineEdit()
-        self.password.setPlaceholderText("Пароль користувача")
-
-        layout.addWidget(self.login)
-        layout.addWidget(self.password)
-
-        return layout
-
-    def footer_layout(self) -> QBoxLayout:
-        layout = QHBoxLayout()
-        self.login_btn = QPushButton('Війти')
-        self.login_btn.clicked.connect(self.login_clicked)
-
-        self.register_btn = QPushButton('Зареєструватися')
-        self.register_btn.clicked.connect(self.register)
-
-        layout.addWidget(self.login_btn)
-        layout.addWidget(self.register_btn)
-
-        return layout
-
+        self.login_window = None
+    def login(self):
+        self.send_request("/login")
     def register(self):
-        global money, click, click_cost, cost_upgrade, passive_income, cost_passive_upgrade, username, password
-        info = {
-            'login': self.login.text(),
-            'password': self.password.text(),
-            'money': money,
-            'click': click,
-            'click_cost': click_cost,
-            'cost_upgrade': cost_upgrade,
-            'passive_income': passive_income,
-            'cost_passive_upgrade': cost_passive_upgrade
-        }
-
-        username = info['login']
-        password = info['password']
-
-        with open(f'users/{self.login.text()}.json', 'w', encoding='utf-8') as file:
-            json.dump(info, file, ensure_ascii=False, indent=4)
-
-    def login_clicked(self):
-        login = self.login.text()
-        password = self.password.text()
+        self.send_request("/register")
+    def send_request(self, endpoint):
+        global username, money, click, click_cost, cost_upgrade, passive_income, cost_passive_upgrade, username, password
+        username = self.login_input.text().strip()
+        password = self.password_input.text().strip()
+        if not username or not password:
+            BaseWindow.show_modal('Помилка', 'Заповніть всі поля', 2)
+            return
         try:
-            with open(f'users/{login}.json', 'r', encoding='utf-8') as file:
-                print('file found')
-                data = json.load(file)
-        except FileNotFoundError:
-            BaseWindow.show_modal('Помилка', 'Неправильний логін або пароль', 2)
+            response = requests.post(
+                API_URL + endpoint,
+                json={"username": username, "password": password}
+            )
+            if response.status_code == 200:
+                message = response.json().get("message", "Успішно")
+                QMessageBox.information(self, "Успіх", message)
+                self.close()
+                if not os.path.isfile(f'users/{username}.json'):
+                    info = {
+                        'money': money,
+                        'click': click,
+                        'click_cost': click_cost,
+                        'cost_upgrade': cost_upgrade,
+                        'passive_income': passive_income,
+                        'cost_passive_upgrade': cost_passive_upgrade
+                    }
 
-        if password == data['password']: # вікно відкривається на 1 кадр
-            print('password')
-            self.window = Clicker()
+                    with open(f'users/{username}.json', 'w', encoding='utf-8') as file:
+                        json.dump(info, file, ensure_ascii=False, indent=4)
 
-
+                if self.login_window is None:
+                    self.login_window = Clicker()
+                self.login_window.show()
+            else:
+                error = response.json().get("detail", "Помилка")
+                QMessageBox.critical(self, "Помилка", error)
+        except requests.exceptions.ConnectionError:
+                QMessageBox.critical(self, "Помилка", "Сервер недоступний")
 
 
 app = QApplication(sys.argv)
-window = RegisterWindow()
+window = LoginWindow()
 sys.exit(app.exec_())

@@ -5,7 +5,6 @@ class BaseWindow(QWidget):
         super().__init__()
         self.setWindowTitle(header)
         # self.setWindowIcon("icon.ico")
-        self.setMinimumWidth(250)
         with open("style.css", "r") as stylesheet:
             self.setStyleSheet(stylesheet.read())
 
